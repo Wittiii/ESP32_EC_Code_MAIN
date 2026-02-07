@@ -23,7 +23,7 @@ inline constexpr uint8_t RELAY_PIN = 2;
 inline constexpr uint8_t ONE_WIRE_BUS = 3;
 
 inline constexpr float Rref = 600.0f;
-inline constexpr int N_AVG = 32;
+inline constexpr int N_AVG = 64;
 inline constexpr int T_SETTLE_MS = 4000;
 inline constexpr float KAPPA_STD_25C = 1.413f;
 inline constexpr float TEMP_COEF = 0.02f;

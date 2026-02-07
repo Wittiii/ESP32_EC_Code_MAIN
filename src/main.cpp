@@ -22,13 +22,17 @@ static unsigned long last_At = 0;
 
 static adsGain_t coarserGain(adsGain_t gain) {
   if (gain == GAIN_SIXTEEN) return GAIN_EIGHT;
-  if (gain == GAIN_EIGHT) return GAIN_FOUR;
-  return GAIN_FOUR;
+  if (gain == GAIN_EIGHT)   return GAIN_FOUR;
+  if (gain == GAIN_FOUR)    return GAIN_TWO;
+  if (gain == GAIN_TWO)     return GAIN_ONE;
+  return GAIN_ONE;
 }
 
 static adsGain_t finerGain(adsGain_t gain) {
-  if (gain == GAIN_FOUR) return GAIN_EIGHT;
-  if (gain == GAIN_EIGHT) return GAIN_SIXTEEN;
+  if (gain == GAIN_ONE)     return GAIN_TWO;
+  if (gain == GAIN_TWO)     return GAIN_FOUR;
+  if (gain == GAIN_FOUR)    return GAIN_EIGHT;
+  if (gain == GAIN_EIGHT)   return GAIN_SIXTEEN;
   return GAIN_SIXTEEN;
 }
 
@@ -52,13 +56,13 @@ static int16_t readAdcAutoRange(uint8_t channel = 0) {
     adsGain_t currentGain = ads.getGain();
     float fraction = fabsf(static_cast<float>(raw) / 32767.0f);
 
-    if (abs(raw) >= 32760 && currentGain != GAIN_FOUR) {
+    if (abs(raw) >= 32760 && currentGain != GAIN_ONE) {
       ads.setGain(coarserGain(currentGain));
       delay(3);
       continue;
     }
 
-    if (fraction > HI_FRAC && currentGain != GAIN_FOUR) {
+    if (fraction > HI_FRAC && currentGain != GAIN_ONE) {
       ads.setGain(coarserGain(currentGain));
       delay(3);
       continue;
@@ -77,12 +81,37 @@ static int16_t readAdcAutoRange(uint8_t channel = 0) {
 }
 
 static float readAverageVoltage(uint8_t channel = 0, int samples = N_AVG) {
-  float sum = 0.0f;
-  for (int i = 0; i < samples; ++i) {
+  const int maxSamples = 128;
+  int n = samples;
+  if (n < 8) n = 8;
+  if (n > maxSamples) n = maxSamples;
+
+  float vals[maxSamples];
+  for (int i = 0; i < n; ++i) {
     int16_t reading = readAdcAutoRange(channel);
-    sum += ads.computeVolts(reading);
+    vals[i] = ads.computeVolts(reading);
   }
-  return sum / static_cast<float>(samples);
+
+  // einfache Sortierung (n ist klein)
+  for (int i = 0; i < n - 1; ++i) {
+    for (int j = i + 1; j < n; ++j) {
+      if (vals[j] < vals[i]) {
+        float t = vals[i];
+        vals[i] = vals[j];
+        vals[j] = t;
+      }
+    }
+  }
+
+  // unten/oben je 10% verwerfen
+  int cut = n / 10;
+  int start = cut;
+  int end = n - cut;
+  if (end <= start) return vals[n / 2];
+
+  float sum = 0.0f;
+  for (int i = start; i < end; ++i) sum += vals[i];
+  return sum / static_cast<float>(end - start);
 }
 
 static const char* gainToString(adsGain_t gain) {

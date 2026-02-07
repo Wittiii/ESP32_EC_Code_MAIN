@@ -1,6 +1,6 @@
 #include "WiFi.h"
 #include "PubSubClient.h"
-#include "header.h"
+
 WiFiClient ESP32Client_Hydroponik;
 PubSubClient client(ESP32Client_Hydroponik);
 
@@ -16,8 +16,17 @@ const char* topic_publish = "esp32_Hydroponic/ec";
 const char* topic_subscribe = "esp32_Hydroponic/ec";
 
 long lastMsg = 0;
-char msg[50];
+char msg[256];
 int value = 0;
+
+struct ECraw {
+  float Vcell = 0.0f;
+  float rho = 0.0f;
+  double Rcell = 0.0;
+  double EC_raw_mS = 0.0;
+  float temperature = NAN;
+  double EC_comp_mS = 0.0;
+};
 
 // Neue Variablen für nicht-blockierendes Reconnect
 unsigned long lastReconnectAttempt = 0;
@@ -88,15 +97,10 @@ void mqttLoop() {
     long now = millis();
     if (now - lastMsg > 10000) {
     lastMsg = now;
-    value++;
     
-    // Nachricht vorbereiten
-    String status = "Status-Update: " + String(value);
-    status.toCharArray(msg, 50);
-
-    // Veröffentlichen
-    client.publish(topic_publish, msg);
     
+    
+   
       
   }
 }
