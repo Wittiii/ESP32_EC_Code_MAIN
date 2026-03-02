@@ -52,4 +52,5 @@ struct ECraw {
   double EC_raw_mS = 0.0;
   float temperature = NAN;
   double EC_comp_mS = 0.0;
+  double Kcell = NAN;
 };

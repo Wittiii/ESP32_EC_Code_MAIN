@@ -8,7 +8,6 @@ MD_AD9833 AD(DATA_PIN, SCLK_PIN, FSYNC_PIN);
 
 
 
-
 float V0_rms = 0.0f;
 float vexc_rms = 0.0f;
 double Kcell = NAN;
@@ -144,6 +143,9 @@ static float calcTemperature(){
   
 }
 
+
+
+
 static double calibrateKcellFromStd(float kappaStd25C) {
   
   float temperature = calcTemperature();
@@ -188,7 +190,7 @@ static ECraw measureEcRaw() {
   float tempFactor = 1.0f + TEMP_COEF * (result.temperature - TEMP_REF);
   double ecMeasured = result.EC_raw_mS * (isfinite(Kcell) ? Kcell : 1.0);
   result.EC_comp_mS = ecMeasured / tempFactor;
-
+  result.Kcell = Kcell;
   return result;
 }
 
@@ -222,14 +224,14 @@ static void logMeasurement(const ECraw& ec) {
   Serial.println(F("--------------------------------------------------"));
 }
 
-static void performCalibration() {
+static void performCalibration(float kappaStd25C) { //With Printlns, not OTA safe
   Serial.println(F("Starting calibration with standard solution"));
   selectExcitationPath();
   vexc_rms = readAverageVoltage();
   selectCellPath();
-  delay(1000);
+  delay(500);
 
-  double newK = calibrateKcellFromStd(KAPPA_STD_25C);
+  double newK = calibrateKcellFromStd(kappaStd25C);
   Serial.print(F("New Kcell="));
   Serial.println(newK, 6);
  
@@ -242,7 +244,7 @@ static void handleSerialCommand(int incoming) {
   }
 
   if (toupper(c) == 'C') {
-    performCalibration();
+    performCalibration(KAPPA_STD_25C);
   }
 }
 
@@ -324,17 +326,23 @@ void loop() {
     ECraw measurement = measureEcRaw();
     logMeasurement(measurement);
     network_publish_measurement(measurement);
+  
   }
 
   if (Serial.available() > 0) {
     handleSerialCommand(Serial.read());
   }
 
+  if (DoCalibration()) {
+    performCalibration(GetCalibrationValue());
+  }
+    
+
   if (now - last_At >= 1000) {
     last_At = now;
     ArduinoOTA.handle(); // wichtig
     delay(10);
-    mqttLoop();//Blockt den Code bis die Verbindung steht, also kein OTA in der Zeit möglich
+    mqttLoop();
     Serial.println("Loop Done");
   }
 

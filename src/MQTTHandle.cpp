@@ -13,11 +13,14 @@ const char* mqtt_password = "1234";
 
 // Topics definieren
 const char* topic_publish = "esp32_Hydroponic/ec";
-const char* topic_subscribe = "esp32_Hydroponic/ec";
+const char* topic_subscribe = "esp32_Hydroponic/ec_cmd";
 
 long lastMsg = 0;
 char msg[256];
 int value = 0;
+
+bool bPerformCalibration = false;
+float calibrationValue = 0.0f;
 
 struct ECraw {
   float Vcell = 0.0f;
@@ -26,6 +29,7 @@ struct ECraw {
   double EC_raw_mS = 0.0;
   float temperature = NAN;
   double EC_comp_mS = 0.0;
+  double Kcell = NAN;
 };
 
 // Neue Variablen für nicht-blockierendes Reconnect
@@ -53,12 +57,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (strcmp(topic, topic_subscribe) == 0) {
         // 2. Den Payload (Daten) in ein lesbares Format umwandeln:
         String message;
+        float value;
         for (int i = 0; i < length; i++) {
         message += (char)payload[i];
+        }
+        message.trim();
+        // 3. Die Nachricht auswerten und entsprechende Aktionen durchführen:
+        if (sscanf(message.c_str(), "Calibrate:%f", &value) == 1) {
+            bPerformCalibration = true;
+            calibrationValue = value;
         }
     }
 
 }
+
+bool DoCalibration() {
+    if (bPerformCalibration) {
+        bPerformCalibration = false; // Reset Flag
+        return true;
+    }
+    return false;
+}
+
+float GetCalibrationValue() {
+    return calibrationValue;
+}
+
 
 void mqttInit(){
     client.setServer(mqtt_server, mqtt_port);
@@ -78,8 +102,8 @@ void network_publish_measurement(ECraw measurement) {
                      "Rcell=" + String(measurement.Rcell, 2) + "Ohm, " +
                      "EC_raw=" + String(measurement.EC_raw_mS, 5) + "mS, " +
                      "Temp=" + String(measurement.temperature, 2) + "C, " +
-                     "EC_comp=" + String(measurement.EC_comp_mS, 5) + "mS";
-    
+                     "EC_comp=" + String(measurement.EC_comp_mS, 5) + "mS, " +
+                      "Kcell=" + String(isfinite(measurement.Kcell) ? measurement.Kcell : NAN, 6) + "cm^-1";
     payload.toCharArray(msg, sizeof(msg));
 
     // Veröffentlichen
