@@ -15,6 +15,8 @@
 const char* ssid = "FRITZ!Box 7590 BK";
 const char* pass = "35428536880518248119";
 const char* ota_password = "1234";
+const unsigned long WifiReconnectIntervalMs = 10000;
+unsigned long lastWifiReconnectAttempt = 0;
 
 inline constexpr uint8_t FSYNC_PIN = 1;
 inline constexpr uint8_t DATA_PIN = 7;

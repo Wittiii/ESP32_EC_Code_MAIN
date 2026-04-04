@@ -112,6 +112,10 @@ void network_publish_measurement(ECraw measurement) {
 
 
 void mqttLoop() {
+    if (WiFi.status() != WL_CONNECTED) {
+    return;
+    }
+
     if (!client.connected()) {
     reconnect();
     return;

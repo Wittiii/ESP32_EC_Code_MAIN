@@ -19,6 +19,27 @@ constexpr uint32_t MEASUREMENT_INTERVAL_MS = 5000;
 static unsigned long lastMeasurementAt = 0;
 static unsigned long last_At = 0;
 
+
+void startWifiConnection() {
+    WiFi.disconnect();
+    WiFi.begin(ssid, pass);
+}
+
+void ensureWifiConnected(unsigned long now) {
+    if (WiFi.status() == WL_CONNECTED) {
+        return;
+    }
+
+    if (now - lastWifiReconnectAttempt < WifiReconnectIntervalMs) {
+        return;
+    }
+
+    lastWifiReconnectAttempt = now;
+    Serial.println("WLAN getrennt, starte Neuverbindung");
+    startWifiConnection();
+}
+
+
 static adsGain_t coarserGain(adsGain_t gain) {
   if (gain == GAIN_SIXTEEN) return GAIN_EIGHT;
   if (gain == GAIN_EIGHT)   return GAIN_FOUR;
@@ -144,8 +165,6 @@ static float calcTemperature(){
 }
 
 
-
-
 static double calibrateKcellFromStd(float kappaStd25C) {
   
   float temperature = calcTemperature();
@@ -252,7 +271,7 @@ void setup() {
 
 
   Serial.begin(460800);
-  WiFi.begin(ssid, pass);
+  startWifiConnection();
   Serial.print("Warte auf WLAN");
   while (WiFi.status() != WL_CONNECTED) {
       delay(500);
@@ -340,8 +359,13 @@ void loop() {
 
   if (now - last_At >= 1000) {
     last_At = now;
-    ArduinoOTA.handle(); // wichtig
-    delay(10);
+
+    ensureWifiConnected(now);
+
+    if (WiFi.status() == WL_CONNECTED) {
+        ArduinoOTA.handle(); // wichtig
+    }
+
     mqttLoop();
     Serial.println("Loop Done");
   }
