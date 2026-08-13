@@ -9,7 +9,7 @@ const char* mqtt_server = "192.168.178.27";
 const int mqtt_port = 1883;
 
 const char* mqtt_user = "pwi";
-const char* mqtt_password = "1234";
+const char* mqtt_password = "19082004";
 
 // Topics definieren
 const char* topic_publish = "esp32_Hydroponic/ec";
