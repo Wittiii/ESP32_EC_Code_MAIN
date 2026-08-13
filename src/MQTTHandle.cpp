@@ -10,7 +10,7 @@ namespace mqttConfig {
 constexpr char kServer[] = "192.168.178.56";
 constexpr int kPort = 1883;
 constexpr char kUser[] = "pwi";
-constexpr char kPassword[] = "1234";
+constexpr char kPassword[] = "19082004";
 constexpr char kPublishTopic[] = "esp32_Hydroponic/ec_ph";
 constexpr char kSubscribeTopic[] = "esp32_Hydroponic/ec_ph_cmd";
 constexpr unsigned long kReconnectIntervalMs = 5000;
