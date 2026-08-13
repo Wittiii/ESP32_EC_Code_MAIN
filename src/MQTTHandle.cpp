@@ -1,135 +1,138 @@
+#include "MQTTHandle.h"
+
 #include "WiFi.h"
 #include "PubSubClient.h"
 
 WiFiClient ESP32Client_Hydroponik;
 PubSubClient client(ESP32Client_Hydroponik);
 
-// MQTT Broker Einstellungen
-const char* mqtt_server = "192.168.178.27"; 
-const int mqtt_port = 1883;
+namespace mqttConfig {
+constexpr char kServer[] = "192.168.178.56";
+constexpr int kPort = 1883;
+constexpr char kUser[] = "pwi";
+constexpr char kPassword[] = "1234";
+constexpr char kPublishTopic[] = "esp32_Hydroponic/ec_ph";
+constexpr char kSubscribeTopic[] = "esp32_Hydroponic/ec_ph_cmd";
+constexpr unsigned long kReconnectIntervalMs = 5000;
+}
 
-const char* mqtt_user = "pwi";
-const char* mqtt_password = "1234";
+static unsigned long lastReconnectAttempt = 0;
+static char msg[384];
+static CalibrationCommand pendingCommand;
+static bool hasPendingCommand = false;
 
-// Topics definieren
-const char* topic_publish = "esp32_Hydroponic/ec";
-const char* topic_subscribe = "esp32_Hydroponic/ec_cmd";
+static bool tryParseFloatCommand(const String& message, const char* prefix, CalibrationCommandType type) {
+  if (!message.startsWith(prefix)) {
+    return false;
+  }
 
-long lastMsg = 0;
-char msg[256];
-int value = 0;
+  String valueText = message.substring(strlen(prefix));
+  valueText.trim();
+  if (valueText.isEmpty()) {
+    return false;
+  }
 
-bool bPerformCalibration = false;
-float calibrationValue = 0.0f;
+  pendingCommand.type = type;
+  pendingCommand.value = valueText.toFloat();
+  hasPendingCommand = true;
+  return true;
+}
 
-struct ECraw {
-  float Vcell = 0.0f;
-  float rho = 0.0f;
-  double Rcell = 0.0;
-  double EC_raw_mS = 0.0;
-  float temperature = NAN;
-  double EC_comp_mS = 0.0;
-  double Kcell = NAN;
-};
+static void handleCommandMessage(const String& message) {
+  if (tryParseFloatCommand(message, "Calibrate:", CalibrationCommandType::Ec) ||
+      tryParseFloatCommand(message, "ECCalibrate:", CalibrationCommandType::Ec) ||
+      tryParseFloatCommand(message, "PHMid:", CalibrationCommandType::PhMid) ||
+      tryParseFloatCommand(message, "PHCalMid:", CalibrationCommandType::PhMid) ||
+      tryParseFloatCommand(message, "PHLow:", CalibrationCommandType::PhLow) ||
+      tryParseFloatCommand(message, "PHCalLow:", CalibrationCommandType::PhLow) ||
+      tryParseFloatCommand(message, "PHHigh:", CalibrationCommandType::PhHigh) ||
+      tryParseFloatCommand(message, "PHCalHigh:", CalibrationCommandType::PhHigh)) {
+    return;
+  }
 
-// Neue Variablen für nicht-blockierendes Reconnect
-unsigned long lastReconnectAttempt = 0;
-const unsigned long reconnectIntervalMs = 5000; // alle 5s versuchen
+  if (message.equalsIgnoreCase("PHClear") || message.equalsIgnoreCase("PHCalClear")) {
+    pendingCommand.type = CalibrationCommandType::PhClear;
+    pendingCommand.value = NAN;
+    hasPendingCommand = true;
+  }
+}
 
-void reconnect() {
+static void reconnect() {
   unsigned long now = millis();
-
-  // Warten bis zum nächsten Versuch, ohne zu blockieren
-  if (now - lastReconnectAttempt < reconnectIntervalMs) return;
+  if (now - lastReconnectAttempt < mqttConfig::kReconnectIntervalMs) {
+    return;
+  }
   lastReconnectAttempt = now;
 
-  // Einzelner Versuch
-  if (client.connect("ESP32Client_Hydroponik_ECSensor", mqtt_user, mqtt_password)) {
-    client.subscribe(topic_subscribe);
-    lastReconnectAttempt = 0; // Reset, damit sofort wieder senden darf
+  if (client.connect("ESP32Client_Hydroponik_EC_PH-Sensor", mqttConfig::kUser, mqttConfig::kPassword)) {
+    client.subscribe(mqttConfig::kSubscribeTopic);
+    lastReconnectAttempt = 0;
   }
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
-  // Hier beginnt die Logik zur Verarbeitung der empfangenen Nachricht.
-  
-  // 1. Prüfen, von welchem Topic die Nachricht stammt:
-  if (strcmp(topic, topic_subscribe) == 0) {
-        // 2. Den Payload (Daten) in ein lesbares Format umwandeln:
-        String message;
-        float value;
-        for (int i = 0; i < length; i++) {
-        message += (char)payload[i];
-        }
-        message.trim();
-        // 3. Die Nachricht auswerten und entsprechende Aktionen durchführen:
-        if (sscanf(message.c_str(), "Calibrate:%f", &value) == 1) {
-            bPerformCalibration = true;
-            calibrationValue = value;
-        }
-    }
-
-}
-
-bool DoCalibration() {
-    if (bPerformCalibration) {
-        bPerformCalibration = false; // Reset Flag
-        return true;
-    }
-    return false;
-}
-
-float GetCalibrationValue() {
-    return calibrationValue;
-}
-
-
-void mqttInit(){
-    client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(callback);
-};
-
-void network_publish_measurement(ECraw measurement) {
-    if (!client.connected()) {
-        reconnect();
-        return;
-    }
-    client.loop();
-
-    // Nachricht vorbereiten
-    String payload = "Vcell=" + String(measurement.Vcell, 2) + "V, " +
-                     "rho=" + String(measurement.rho, 2) + ", " +
-                     "Rcell=" + String(measurement.Rcell, 2) + "Ohm, " +
-                     "EC_raw=" + String(measurement.EC_raw_mS, 5) + "mS, " +
-                     "Temp=" + String(measurement.temperature, 2) + "C, " +
-                     "EC_comp=" + String(measurement.EC_comp_mS, 5) + "mS, " +
-                      "Kcell=" + String(isfinite(measurement.Kcell) ? measurement.Kcell : NAN, 6) + "cm^-1";
-    payload.toCharArray(msg, sizeof(msg));
-
-    // Veröffentlichen
-    client.publish(topic_publish, msg);
-};
-
-
-void mqttLoop() {
-    if (WiFi.status() != WL_CONNECTED) {
+static void callback(char* topic, byte* payload, unsigned int length) {
+  if (strcmp(topic, mqttConfig::kSubscribeTopic) != 0) {
     return;
-    }
+  }
 
-    if (!client.connected()) {
+  String message;
+  for (unsigned int i = 0; i < length; ++i) {
+    message += static_cast<char>(payload[i]);
+  }
+  message.trim();
+  handleCommandMessage(message);
+}
+
+bool TryConsumeCalibrationCommand(CalibrationCommand& command) {
+  if (!hasPendingCommand) {
+    return false;
+  }
+
+  command = pendingCommand;
+  pendingCommand = CalibrationCommand{};
+  hasPendingCommand = false;
+  return true;
+}
+
+void mqttInit() {
+  client.setServer(mqttConfig::kServer, mqttConfig::kPort);
+  client.setCallback(callback);
+}
+
+void network_publish_measurement(const ECraw& measurement) {
+  if (!client.connected()) {
     reconnect();
     return;
-    }
-    client.loop();
-
-    long now = millis();
-    if (now - lastMsg > 10000) {
-    lastMsg = now;
-    
-    
-    
-   
-      
   }
+
+  client.loop();
+
+  String payload = "Vcell=" + String(measurement.Vcell, 3) + "V, " +
+                   "rho=" + String(measurement.rho, 3) + ", " +
+                   "Rcell=" + String(measurement.Rcell, 2) + "Ohm, " +
+                   "EC_raw=" + String(measurement.EC_raw_mS, 5) + "mS, " +
+                   "Temp=" + String(measurement.temperature, 2) + "C, " +
+                   "EC_comp=" + String(measurement.EC_comp_mS, 5) + "mS, " +
+                   "Kcell=" + String(isfinite(measurement.Kcell) ? measurement.Kcell : NAN, 6) + "cm^-1, " +
+                   "PH_V=" + String(measurement.pHVoltage, 4) + "V, " +
+                   "PH_raw=" + String(measurement.pHRawValue, 3) + ", " +
+                   "PH_comp=" + String(measurement.pHValue, 3) + ", " +
+                   "PH=" + String(measurement.pHValue, 3) + ", " +
+                   "PH_neutral_V=" + String(measurement.pHNeutralVoltage, 5) + "V, " +
+                   "PH_slope25=" + String(measurement.pHSlope25, 6) + "V/pH";
+  payload.toCharArray(msg, sizeof(msg));
+  client.publish(mqttConfig::kPublishTopic, msg);
 }
 
+void mqttLoop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  if (!client.connected()) {
+    reconnect();
+    return;
+  }
+
+  client.loop();
+}

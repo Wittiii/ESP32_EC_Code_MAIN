@@ -12,28 +12,43 @@
 
 
 
-const char* ssid = "FRITZ!Box 7590 BK";
-const char* pass = "35428536880518248119";
-const char* ota_password = "1234";
-const unsigned long WifiReconnectIntervalMs = 10000;
-unsigned long lastWifiReconnectAttempt = 0;
+inline constexpr char ssid[] = "FRITZ!Box 7590 BK";
+inline constexpr char pass[] = "35428536880518248119";
+inline constexpr char ota_password[] = "1234";
+inline constexpr unsigned long WifiReconnectIntervalMs = 10000;
+inline unsigned long lastWifiReconnectAttempt = 0;
 
 inline constexpr uint8_t FSYNC_PIN = 1;
 inline constexpr uint8_t DATA_PIN = 7;
 inline constexpr uint8_t SCLK_PIN = 4;
+inline constexpr uint8_t I2C_SDA_PIN = 8;
+inline constexpr uint8_t I2C_SCL_PIN = 9;
 inline constexpr uint8_t RELAY_PIN = 2;
 inline constexpr uint8_t ONE_WIRE_BUS = 3;
+inline constexpr uint8_t EC_ADS_ADDRESS = 0x48;
+inline constexpr uint8_t PH_ADS_ADDRESS = 0x49;
+inline constexpr uint8_t EC_ADC_CHANNEL = 0;
+inline constexpr uint8_t NTC_ADC_CHANNEL = 1;
+inline constexpr uint8_t PH_ADC_CHANNEL = 3;
 
 inline constexpr float Rref = 600.0f;
 inline constexpr int N_AVG = 64;
+inline constexpr int PH_N_AVG = 32;
 inline constexpr int T_SETTLE_MS = 4000;
 inline constexpr float KAPPA_STD_25C = 1.413f;
 inline constexpr float TEMP_COEF = 0.02f;
 inline constexpr float TEMP_REF = 25.0f;
 inline constexpr float HI_FRAC = 0.85f;
 inline constexpr float LO_FRAC = 0.18f;
+inline constexpr float PH_NEUTRAL_DEFAULT = 7.0f;
+inline constexpr float PH_LOW_DEFAULT = 4.0f;
+inline constexpr float PH_HIGH_DEFAULT = 10.0f;
+inline constexpr float PH_MIN_VALUE = 0.0f;
+inline constexpr float PH_MAX_VALUE = 14.0f;
+inline constexpr float KELVIN_OFFSET = 273.15f;
 
 extern Adafruit_ADS1115 ads;
+extern Adafruit_ADS1115 adsPh;
 extern MD_AD9833 AD;
 
 inline constexpr float Uref = 3.3f;
@@ -55,4 +70,9 @@ struct ECraw {
   float temperature = NAN;
   double EC_comp_mS = 0.0;
   double Kcell = NAN;
+  float pHVoltage = NAN;
+  float pHRawValue = NAN;
+  float pHValue = NAN;
+  float pHNeutralVoltage = NAN;
+  float pHSlope25 = NAN;
 };
